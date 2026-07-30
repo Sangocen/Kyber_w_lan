@@ -81,12 +81,21 @@ class _ModerationBanDialogState extends State<ModerationBanDialog> {
             color: kWhiteColor,
           ),
           onPressed: () async {
-            await context.read<ModerationCubit>().banPlayer(
+            final cubit = context.read<ModerationCubit>();
+            if (cubit.state.isLocalLanHost) {
+              Navigator.of(context).pop();
+              return;
+            }
+
+            await cubit.banPlayer(
               id: widget.player.id,
               duration: _durations.values.elementAt(selectedDurationIndex),
               reason: reason ?? '',
             );
-            context.read<ModerationCubit>().loadPunishments();
+            if (!context.mounted) {
+              return;
+            }
+            await cubit.loadPunishments();
             Navigator.of(context).pop();
             NotificationService.info(message: 'Player banned');
           },

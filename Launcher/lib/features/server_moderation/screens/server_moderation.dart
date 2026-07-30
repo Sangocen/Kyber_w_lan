@@ -863,76 +863,78 @@ class _TeamContainerState extends State<_TeamContainer> {
                                       size: 17,
                                     ),
                                   ),
-                                  const SizedBox(width: 5),
-                                  KyberTooltip(
-                                    message: 'Kick player'.toUpperCase(),
-                                    child: CustomSvgButton(
-                                      onPressed: () async {
-                                        final reason =
-                                            await showKyberDialog<String?>(
-                                              context: context,
-                                              builder: (_) =>
-                                                  const ModerationInputDialog(),
-                                            );
-                                        if (reason == null) {
-                                          return;
-                                        }
+                                  if (!state.isLocalLanHost) ...[
+                                    const SizedBox(width: 5),
+                                    KyberTooltip(
+                                      message: 'Kick player'.toUpperCase(),
+                                      child: CustomSvgButton(
+                                        onPressed: () async {
+                                          final reason =
+                                              await showKyberDialog<String?>(
+                                                context: context,
+                                                builder: (_) =>
+                                                    const ModerationInputDialog(),
+                                              );
+                                          if (reason == null) {
+                                            return;
+                                          }
 
-                                        await context
-                                            .read<ModerationCubit>()
-                                            .kickPlayer(
-                                              player.id,
-                                              reason: reason,
-                                            )
-                                            .onError((error, stackTrace) {
-                                              if (error is GrpcError) {
-                                                NotificationService.showNotification(
-                                                  message: error.message!,
-                                                  severity:
-                                                      InfoBarSeverity.error,
-                                                );
-                                              } else {
-                                                NotificationService.showNotification(
-                                                  message: 'An error occurred',
-                                                  severity:
-                                                      InfoBarSeverity.error,
-                                                );
-                                                Logger.root.severe(
-                                                  'Error kicking player',
-                                                  error,
-                                                  stackTrace,
-                                                );
-                                              }
-                                            });
-                                      },
-                                      path: Assets.icons.kblKick.path,
-                                      hoverColor: Colors.black,
-                                      color: hovered ? kButtonBorder : null,
-                                      size: 17,
+                                          await context
+                                              .read<ModerationCubit>()
+                                              .kickPlayer(
+                                                player.id,
+                                                reason: reason,
+                                              )
+                                              .onError((error, stackTrace) {
+                                                if (error is GrpcError) {
+                                                  NotificationService.showNotification(
+                                                    message: error.message!,
+                                                    severity:
+                                                        InfoBarSeverity.error,
+                                                  );
+                                                } else {
+                                                  NotificationService.showNotification(
+                                                    message: 'An error occurred',
+                                                    severity:
+                                                        InfoBarSeverity.error,
+                                                  );
+                                                  Logger.root.severe(
+                                                    'Error kicking player',
+                                                    error,
+                                                    stackTrace,
+                                                  );
+                                                }
+                                              });
+                                        },
+                                        path: Assets.icons.kblKick.path,
+                                        hoverColor: Colors.black,
+                                        color: hovered ? kButtonBorder : null,
+                                        size: 17,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 5),
-                                  KyberTooltip(
-                                    message: 'Ban player'.toUpperCase(),
-                                    child: CustomSvgButton(
-                                      onPressed: () async {
-                                        await showKyberDialog(
-                                          context: context,
-                                          builder: (_) => BlocProvider.value(
-                                            value: context
-                                                .read<ModerationCubit>(),
-                                            child: ModerationBanDialog(
-                                              player: player,
+                                    const SizedBox(width: 5),
+                                    KyberTooltip(
+                                      message: 'Ban player'.toUpperCase(),
+                                      child: CustomSvgButton(
+                                        onPressed: () async {
+                                          await showKyberDialog(
+                                            context: context,
+                                            builder: (_) => BlocProvider.value(
+                                              value: context
+                                                  .read<ModerationCubit>(),
+                                              child: ModerationBanDialog(
+                                                player: player,
+                                              ),
                                             ),
-                                          ),
-                                        );
-                                      },
-                                      path: Assets.icons.kblBan.path,
-                                      hoverColor: Colors.black,
-                                      color: hovered ? kButtonBorder : null,
-                                      size: 17,
+                                          );
+                                        },
+                                        path: Assets.icons.kblBan.path,
+                                        hoverColor: Colors.black,
+                                        color: hovered ? kButtonBorder : null,
+                                        size: 17,
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                   const SizedBox(width: 5),
                                   if ((!state.moderators.contains(player) &&
                                           state.server?.creatorId !=
