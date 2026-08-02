@@ -79,7 +79,7 @@ class _ServerHostState extends State<ServerHost> {
           Expanded(
             flex: 6,
             child: BorderedContent(
-              overlappingBorder: !createServer &&! context
+              overlappingBorder: !createServer && !context
                   .watch<ModerationCubit>()
                   .state
                   .selected,

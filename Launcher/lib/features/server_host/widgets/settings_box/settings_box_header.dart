@@ -191,25 +191,7 @@ class SettingsBoxHeader extends StatelessWidget {
               );
             },
           ),
-          FutureBuilder<String>(
-            future: LanDiscoveryService.getLanAddress(),
-            builder: (context, snapshot) {
-              final address = snapshot.data;
-              final displayAddress = address == null ||
-                      address == InternetAddress.loopbackIPv4.address
-                  ? 'available after the game is running'
-                  : '$address:${LanDiscoveryService.gamePort}';
-              return Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  'LAN address: $displayAddress',
-                  style: FluentTheme.of(context).typography.caption?.copyWith(
-                    color: kWhiteColor,
-                  ),
-                ),
-              );
-            },
-          ),
+          const _LanAddressLine(),
           const SizedBox(
             height: 10,
           ),
@@ -487,6 +469,53 @@ class SettingsBoxHeader extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _LanAddressLine extends StatefulWidget {
+  const _LanAddressLine();
+
+  @override
+  State<_LanAddressLine> createState() => _LanAddressLineState();
+}
+
+class _LanAddressLineState extends State<_LanAddressLine> {
+  late final Future<String> _lanAddressFuture =
+      LanDiscoveryService.getLanAddress();
+
+  int _displayPort() {
+    final form = hostingForm.currentState;
+    final lanMode = form?.instantValue['lanMode'] as bool? ?? false;
+    if (!lanMode) {
+      return LanDiscoveryService.gamePort;
+    }
+
+    return int.tryParse((form?.instantValue['serverPort'] ?? '').toString()) ??
+        LanDiscoveryService.gamePort;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _lanAddressFuture,
+      builder: (context, snapshot) {
+        final address = snapshot.data;
+        final port = _displayPort();
+        final displayAddress = address == null ||
+                address == InternetAddress.loopbackIPv4.address
+            ? 'available after the game is running'
+            : '$address:$port';
+        return Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            'LAN address: $displayAddress',
+            style: FluentTheme.of(context).typography.caption?.copyWith(
+              color: kWhiteColor,
+            ),
+          ),
+        );
+      },
     );
   }
 }

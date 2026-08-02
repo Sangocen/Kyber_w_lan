@@ -41,6 +41,7 @@ class _ServerSettingsBoxState extends State<ServerSettingsBox> {
         'serverPort': '25200',
       },
       onChanged: () async {
+        setState(() {});
         final state = context.read<ModerationCubit>().state;
         if (!state.selected && state.id == null) {
           Preferences.hostServer.name =
