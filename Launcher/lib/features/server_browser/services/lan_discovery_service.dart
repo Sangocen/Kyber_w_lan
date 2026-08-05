@@ -63,10 +63,14 @@ class LanDiscoveryService {
     });
   }
 
-  Future<void> dispose() async {
-    await _controller.close();
+  Future<void> stopListening() async {
     _listener?.close();
     _listener = null;
+  }
+
+  Future<void> dispose() async {
+    await stopListening();
+    await _controller.close();
   }
 
   static bool sharesClassCSubnet(String left, String right) {

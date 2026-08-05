@@ -238,6 +238,9 @@ class _AppState extends State<App> {
 
   @override
   void dispose() {
+    if (sl.isRegistered<LanDiscoveryService>()) {
+      unawaited(sl.get<LanDiscoveryService>().dispose());
+    }
     super.dispose();
   }
 
