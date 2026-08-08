@@ -1,9 +1,10 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kyber_launcher/core/config/colors.dart';
-import 'package:kyber_launcher/features/kyber/services/map_helper.dart';
 import 'package:kyber/kyber.dart';
+import 'package:kyber_launcher/features/kyber/services/map_helper.dart';
 import 'package:kyber_launcher/features/server_browser/helpers/lan_server_browser_helper.dart';
+import 'package:kyber_launcher/features/server_browser/helpers/lan_server_display_helper.dart';
 import 'package:kyber_launcher/features/server_browser/models/lan_server.dart';
 import 'package:kyber_launcher/features/server_browser/providers/lan_discovery_cubit.dart';
 import 'package:kyber_launcher/features/server_browser/widgets/server_mod_tile.dart';
@@ -21,7 +22,7 @@ class LanServerInfoBox extends StatelessWidget {
     final mapImage = levelSetup == null
         ? null
         : MapHelper.getImageForMap(levelSetup.map);
-    final canJoin = LanServerBrowserHelper.canJoinServer(context, server: server);
+    final canJoin = LanServerBrowserHelper.canJoinServer(server: server);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -71,21 +72,7 @@ class LanServerInfoBox extends StatelessWidget {
                       const Spacer(),
                       if (levelSetup != null)
                         Text(
-                          [
-                            if (levelSetup.modeName.isNotEmpty)
-                              levelSetup.modeName
-                            else
-                              MapHelper.getMode(levelSetup.mode)?.name ??
-                                  levelSetup.mode,
-                            if (levelSetup.mapName.isNotEmpty)
-                              levelSetup.mapName
-                            else
-                              MapHelper.getMap(
-                                    levelSetup.mode,
-                                    levelSetup.map,
-                                  )?.name ??
-                                  levelSetup.map,
-                          ].join(' | ').toUpperCase(),
+                          LanServerDisplayHelper.levelSubtitle(levelSetup),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -125,7 +112,7 @@ class LanServerInfoBox extends StatelessWidget {
           child: KyberButton(
             text: 'JOIN SERVER',
             onPressed: canJoin
-                ? () => context.read<LanDiscoveryCubit>().joinServer(server)
+                ? () => context.read<LanDiscoveryCubit>().requestJoin(server)
                 : null,
           ),
         ),

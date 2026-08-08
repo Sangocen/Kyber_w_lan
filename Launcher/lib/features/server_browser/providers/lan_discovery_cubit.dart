@@ -1,15 +1,14 @@
 import 'dart:async';
 
-import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:kyber_launcher/core/routing/app_router.dart';
-import 'package:kyber_launcher/core/services/notification_service.dart';
+import 'package:kyber_collection/kyber_collection.dart';
+import 'package:kyber_launcher/core/services/app_settings.dart';
 import 'package:kyber_launcher/features/kyber/helper/kyber_server_helper.dart';
 import 'package:kyber_launcher/features/server_browser/dialogs/join_server_dialog.dart';
 import 'package:kyber_launcher/features/server_browser/helpers/lan_server_browser_helper.dart';
+import 'package:kyber_launcher/features/server_browser/models/lan_direct_connect_join_request.dart';
 import 'package:kyber_launcher/features/server_browser/models/lan_server.dart';
 import 'package:kyber_launcher/features/server_browser/services/lan_discovery_service.dart';
-import 'package:kyber_launcher/shared/ui/dialog/kyber_dialog.dart';
 import 'package:logging/logging.dart';
 
 class LanDiscoveryState {
@@ -18,12 +17,16 @@ class LanDiscoveryState {
     this.scanning = false,
     this.message,
     this.selectedServer,
+    this.pendingLanJoin,
+    this.pendingDirectConnect,
   });
 
   final List<LanServer> servers;
   final bool scanning;
   final String? message;
   final LanServer? selectedServer;
+  final LanServer? pendingLanJoin;
+  final LanDirectConnectJoinRequest? pendingDirectConnect;
 
   LanDiscoveryState copyWith({
     List<LanServer>? servers,
@@ -31,13 +34,23 @@ class LanDiscoveryState {
     String? message,
     LanServer? selectedServer,
     bool clearSelectedServer = false,
+    bool clearMessage = false,
+    LanServer? pendingLanJoin,
+    bool clearPendingLanJoin = false,
+    LanDirectConnectJoinRequest? pendingDirectConnect,
+    bool clearPendingDirectConnect = false,
   }) {
     return LanDiscoveryState(
       servers: servers ?? this.servers,
       scanning: scanning ?? this.scanning,
-      message: message,
+      message: clearMessage ? null : (message ?? this.message),
       selectedServer:
           clearSelectedServer ? null : selectedServer ?? this.selectedServer,
+      pendingLanJoin:
+          clearPendingLanJoin ? null : pendingLanJoin ?? this.pendingLanJoin,
+      pendingDirectConnect: clearPendingDirectConnect
+          ? null
+          : pendingDirectConnect ?? this.pendingDirectConnect,
     );
   }
 }
@@ -88,25 +101,57 @@ class LanDiscoveryCubit extends Cubit<LanDiscoveryState> {
     );
   }
 
-  Future<void> joinServer(LanServer server) async {
-    if (!LanServerBrowserHelper.hasInstalledMods(server)) {
-      NotificationService.showNotification(
-        message: 'Install the required gameplay mods before joining this server.',
-        severity: InfoBarSeverity.warning,
-      );
+  void requestJoin(LanServer server) {
+    final blockReason = LanServerBrowserHelper.joinBlockReason(server);
+    if (blockReason != null) {
+      emit(state.copyWith(message: blockReason));
       return;
     }
 
+    emit(state.copyWith(pendingLanJoin: server));
+  }
+
+  void clearPendingLanJoin() {
+    if (state.pendingLanJoin == null) {
+      return;
+    }
+    emit(state.copyWith(clearPendingLanJoin: true));
+  }
+
+  void requestDirectConnect({
+    required String ip,
+    required int port,
+    ModCollectionMetaData? baseCollection,
+    bool spectator = false,
+  }) {
+    Preferences.general.lastDirectConnectIp = ip;
+    Preferences.general.lastDirectConnectPort = port;
+    Preferences.general.lastDirectConnectCollectionId = baseCollection?.localId;
+
+    emit(
+      state.copyWith(
+        pendingDirectConnect: LanDirectConnectJoinRequest(
+          ip: ip,
+          port: port,
+          baseCollection: baseCollection,
+          spectator: spectator,
+        ),
+      ),
+    );
+  }
+
+  void clearPendingDirectConnect() {
+    if (state.pendingDirectConnect == null) {
+      return;
+    }
+    emit(state.copyWith(clearPendingDirectConnect: true));
+  }
+
+  Future<void> completeLanJoin(
+    LanServer server,
+    JoinDialogResult result,
+  ) async {
     try {
-      final result = await showKyberDialog<JoinDialogResult?>(
-        context: navigatorKey.currentContext!,
-        builder: (_) => CosmeticModsDialog.lan(server: server),
-      );
-
-      if (result == null) {
-        return;
-      }
-
       await KyberServerHelper.joinLanServer(
         server,
         selectedCollection: result.collection,
@@ -114,8 +159,30 @@ class LanDiscoveryCubit extends Cubit<LanDiscoveryState> {
       );
     } catch (e, stack) {
       _logger.severe('Failed to join LAN server', e, stack);
-      NotificationService.error(
-        message: 'Failed to join LAN server: $e',
+      emit(
+        state.copyWith(message: 'Failed to join LAN server: $e'),
+      );
+    }
+  }
+
+  Future<void> completeDirectConnectJoin(
+    LanDirectConnectJoinRequest request,
+    JoinDialogResult result,
+  ) async {
+    try {
+      await KyberServerHelper.joinByAddress(
+        ip: request.ip,
+        port: request.port,
+        selectedCollection: LanServerBrowserHelper.resolveDirectConnectCollection(
+          request.baseCollection,
+          result,
+        ),
+        spectator: request.spectator || result.spectator,
+      );
+    } catch (e, stack) {
+      _logger.severe('Failed to join LAN server by address', e, stack);
+      emit(
+        state.copyWith(message: 'Failed to join LAN server: $e'),
       );
     }
   }
@@ -123,52 +190,6 @@ class LanDiscoveryCubit extends Cubit<LanDiscoveryState> {
   Future<void> _refreshLocalPreferredAddress() async {
     _localPreferredAddress =
         await LanDiscoveryService.getPreferredLanAddressFromModule();
-  }
-
-  bool _isOnLocalSubnet(String address) {
-    final local = _localPreferredAddress;
-    if (local == null || local.isEmpty) {
-      return false;
-    }
-
-    return LanDiscoveryService.sharesClassCSubnet(local, address);
-  }
-
-  int _addressClassPriority(String ip) {
-    if (ip.startsWith('192.168.')) {
-      return 0;
-    }
-
-    if (ip.startsWith('10.')) {
-      return 1;
-    }
-
-    final parts = ip.split('.');
-    if (parts.length == 4) {
-      final first = int.tryParse(parts[0]);
-      final second = int.tryParse(parts[1]);
-      if (first == 172 && second != null && second >= 16 && second <= 31) {
-        return 2;
-      }
-    }
-
-    return 3;
-  }
-
-  bool _shouldPreferServer(LanServer candidate, LanServer existing) {
-    final candidateOnSubnet = _isOnLocalSubnet(candidate.address);
-    final existingOnSubnet = _isOnLocalSubnet(existing.address);
-    if (candidateOnSubnet != existingOnSubnet) {
-      return candidateOnSubnet;
-    }
-
-    final candidatePriority = _addressClassPriority(candidate.address);
-    final existingPriority = _addressClassPriority(existing.address);
-    if (candidatePriority != existingPriority) {
-      return candidatePriority < existingPriority;
-    }
-
-    return candidate.lastSeen.isAfter(existing.lastSeen);
   }
 
   void _upsertServer(LanServer server) {
@@ -185,21 +206,10 @@ class LanDiscoveryCubit extends Cubit<LanDiscoveryState> {
       (entry) => entry.port == server.port && entry.name == server.name,
     );
 
-    final preferred = existingByName == null
-        ? server
-        : (_shouldPreferServer(server, existingByName) ? server : existingByName);
-    final resolved = preferred.copyWith(
-      lastSeen: server.lastSeen,
-      gameplayMods: server.gameplayMods.isNotEmpty
-          ? server.gameplayMods
-          : preferred.gameplayMods,
-      playerCount: server.playerCount ?? preferred.playerCount,
-      maxPlayers: server.maxPlayers ?? preferred.maxPlayers,
-      requiresPassword: server.requiresPassword,
-      levelSetup: server.levelSetup ?? preferred.levelSetup,
-      name: server.name,
-      address: preferred.address,
-      port: server.port,
+    final resolved = LanServerBrowserHelper.mergeDiscoveredServer(
+      incoming: server,
+      existingByName: existingByName,
+      localPreferredAddress: _localPreferredAddress,
     );
     servers.add(resolved);
 
@@ -210,7 +220,7 @@ class LanDiscoveryCubit extends Cubit<LanDiscoveryState> {
     emit(
       state.copyWith(
         servers: servers,
-        message: null,
+        clearMessage: true,
         selectedServer: selectedServer,
       ),
     );
@@ -222,7 +232,8 @@ class LanDiscoveryCubit extends Cubit<LanDiscoveryState> {
     final now = DateTime.now();
     final servers = state.servers
         .where(
-          (server) => now.difference(server.lastSeen) < LanDiscoveryService.staleAfter,
+          (server) =>
+              now.difference(server.lastSeen) < LanDiscoveryService.staleAfter,
         )
         .toList();
     if (servers.length != state.servers.length) {
@@ -234,6 +245,7 @@ class LanDiscoveryCubit extends Cubit<LanDiscoveryState> {
   Future<void> close() async {
     await _subscription.cancel();
     _cleanupTimer.cancel();
+    await _service.stopListening();
     return super.close();
   }
 }

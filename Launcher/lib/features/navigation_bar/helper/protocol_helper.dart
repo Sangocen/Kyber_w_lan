@@ -19,6 +19,7 @@ import 'package:kyber_launcher/features/maxima/providers/maxima_cubit.dart';
 import 'package:kyber_launcher/features/mods/helper/mod_helper.dart';
 import 'package:kyber_launcher/features/mods/services/mod_service.dart';
 import 'package:kyber_launcher/features/nexusmods/services/nexusmods_service.dart';
+import 'package:kyber_launcher/features/server_browser/providers/lan_discovery_cubit.dart';
 import 'package:kyber_launcher/features/server_browser/providers/server_browser_cubit.dart';
 import 'package:kyber_launcher/injection_container.dart';
 import 'package:kyber_launcher/main.dart';
@@ -206,9 +207,19 @@ class ProtocolHelper {
             return;
           }
 
+          final joinPort = port ?? KyberServerHelper.defaultLanPort;
+          final navContext = navigatorKey.currentContext;
+          if (navContext != null) {
+            navContext.read<LanDiscoveryCubit>().requestDirectConnect(
+              ip: ip,
+              port: joinPort,
+            );
+            return;
+          }
+
           await KyberServerHelper.joinByAddress(
             ip: ip,
-            port: port ?? KyberServerHelper.defaultLanPort,
+            port: joinPort,
           );
         case 'start_game':
           if (!navigatorKey.currentContext!

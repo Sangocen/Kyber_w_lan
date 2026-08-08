@@ -1,11 +1,9 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kyber_launcher/core/config/colors.dart';
-import 'package:kyber_launcher/features/kyber/models/maps.dart';
-import 'package:kyber_launcher/features/kyber/models/mode.dart';
-import 'package:kyber_launcher/features/kyber/models/modes.dart';
 import 'package:kyber_launcher/features/kyber/services/map_helper.dart';
 import 'package:kyber_launcher/features/server_browser/helpers/lan_server_browser_helper.dart';
+import 'package:kyber_launcher/features/server_browser/helpers/lan_server_display_helper.dart';
 import 'package:kyber_launcher/features/server_browser/models/lan_server.dart';
 import 'package:kyber_launcher/features/server_browser/providers/lan_discovery_cubit.dart';
 import 'package:kyber_launcher/features/server_browser/widgets/server_list/server_list_header.dart';
@@ -78,7 +76,7 @@ class _LanServerListWidgetState extends State<LanServerListWidget> {
                       context.read<LanDiscoveryCubit>().selectServer(server);
                     },
                     onJoin: () {
-                      context.read<LanDiscoveryCubit>().joinServer(server);
+                      context.read<LanDiscoveryCubit>().requestJoin(server);
                     },
                   );
                 },
@@ -113,19 +111,9 @@ class _LanServerEntry extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hovered = hoveredIndex == index + 1;
-    final levelSetup = server.levelSetup;
-    final mode =
-        modes
-            .where((element) => element.mode == levelSetup?.mode)
-            .firstOrNull ??
-        Mode.customMode();
-    final map = levelSetup == null || mode.maps.isEmpty
-        ? maps.first
-        : maps.singleWhere(
-            (element) => element['map'] == levelSetup.map,
-            orElse: () => maps.first,
-          );
-    final canJoin = LanServerBrowserHelper.canJoinServer(context, server: server);
+    final mode = LanServerDisplayHelper.modeForServer(server);
+    final map = LanServerDisplayHelper.mapForServer(server, mode);
+    final canJoin = LanServerBrowserHelper.canJoinServer(server: server);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 150),
@@ -202,23 +190,7 @@ class _LanServerEntry extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          [
-                            if (levelSetup?.modeName.isNotEmpty ?? false)
-                              levelSetup!.modeName
-                            else if (levelSetup?.mode.isNotEmpty ?? false)
-                              MapHelper.getMode(levelSetup!.mode)?.name ??
-                                  levelSetup.mode,
-                            if (levelSetup?.mapName.isNotEmpty ?? false)
-                              levelSetup!.mapName
-                            else if (levelSetup?.map.isNotEmpty ?? false)
-                              MapHelper.getMap(
-                                    levelSetup!.mode,
-                                    levelSetup.map,
-                                  )?.name ??
-                                  levelSetup.map,
-                            if (server.gameplayMods.isNotEmpty)
-                              '${server.gameplayMods.length} required mod${server.gameplayMods.length == 1 ? '' : 's'}',
-                          ].join(' | ').toUpperCase(),
+                          LanServerDisplayHelper.listEntrySubtitle(server),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(

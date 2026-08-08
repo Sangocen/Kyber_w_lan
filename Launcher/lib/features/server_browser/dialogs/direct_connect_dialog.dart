@@ -2,10 +2,10 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:kyber_collection/kyber_collection.dart';
 import 'package:kyber_launcher/core/services/app_settings.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kyber_launcher/features/frosty/dialogs/frosty_pack_selector_dialog.dart';
 import 'package:kyber_launcher/features/kyber/helper/kyber_server_helper.dart';
-import 'package:kyber_launcher/features/server_browser/dialogs/join_server_dialog.dart';
-import 'package:kyber_launcher/core/routing/app_router.dart';
+import 'package:kyber_launcher/features/server_browser/providers/lan_discovery_cubit.dart';
 import 'package:kyber_launcher/main.dart';
 import 'package:kyber_launcher/shared/ui/dialog/kyber_dialog.dart';
 import 'package:kyber_launcher/shared/ui/ui.dart';
@@ -70,43 +70,13 @@ class _DirectConnectDialogState extends State<DirectConnectDialog> {
       return;
     }
 
-    Preferences.general.lastDirectConnectIp = ip;
-    Preferences.general.lastDirectConnectPort = port;
-    Preferences.general.lastDirectConnectCollectionId = _collection?.localId;
-
+    final cubit = context.read<LanDiscoveryCubit>();
     Navigator.of(context).pop();
-
-    final result = await showKyberDialog<JoinDialogResult?>(
-      context: navigatorKey.currentContext!,
-      builder: (_) => CosmeticModsDialog.directConnect(),
-    );
-
-    if (result == null) {
-      return;
-    }
-
-    await KyberServerHelper.joinByAddress(
+    cubit.requestDirectConnect(
       ip: ip,
       port: port,
-      selectedCollection: _resolveJoinCollection(_collection, result),
-      spectator: _spectator || result.spectator,
-    );
-  }
-
-  ModCollectionMetaData _resolveJoinCollection(
-    ModCollectionMetaData? base,
-    JoinDialogResult result,
-  ) {
-    if (result.collection.localId == 'no-mods') {
-      return base ?? ModCollectionMetaData.noMods();
-    }
-
-    if (base == null) {
-      return result.collection;
-    }
-
-    return base.copyWith(
-      mods: [...base.mods, ...result.collection.mods],
+      baseCollection: _collection,
+      spectator: _spectator,
     );
   }
 

@@ -7,7 +7,9 @@ import 'package:kyber_launcher/features/kyber/helper/kyber_status_helper.dart';
 import 'package:kyber_launcher/features/kyber/providers/kyber_api_status_cubit.dart';
 import 'package:kyber_launcher/features/lightswitch/models/status.dart';
 import 'package:kyber_launcher/features/server_browser/constants/modes.dart';
+import 'package:kyber_launcher/core/services/notification_service.dart';
 import 'package:kyber_launcher/features/server_browser/dialogs/direct_connect_dialog.dart';
+import 'package:kyber_launcher/features/server_browser/dialogs/join_server_dialog.dart';
 import 'package:kyber_launcher/features/server_browser/models/server_filter.dart';
 import 'package:kyber_launcher/features/server_browser/models/server_list_state.dart';
 import 'package:kyber_launcher/features/server_browser/providers/lan_discovery_cubit.dart';
@@ -35,14 +37,83 @@ class ServerBrowser extends StatefulWidget {
 class _ServerBrowserState extends State<ServerBrowser> {
   int _selectedTab = 0;
 
-  @override
-  void initState() {
-    super.initState();
+  Future<void> _onPendingLanJoin(
+    BuildContext context,
+    LanDiscoveryState state,
+  ) async {
+    final server = state.pendingLanJoin;
+    if (server == null) {
+      return;
+    }
+
+    context.read<LanDiscoveryCubit>().clearPendingLanJoin();
+
+    final result = await showKyberDialog<JoinDialogResult?>(
+      context: context,
+      builder: (_) => CosmeticModsDialog.lan(server: server),
+    );
+
+    if (!context.mounted || result == null) {
+      return;
+    }
+
+    await context.read<LanDiscoveryCubit>().completeLanJoin(server, result);
+  }
+
+  Future<void> _onPendingDirectConnect(
+    BuildContext context,
+    LanDiscoveryState state,
+  ) async {
+    final request = state.pendingDirectConnect;
+    if (request == null) {
+      return;
+    }
+
+    context.read<LanDiscoveryCubit>().clearPendingDirectConnect();
+
+    final result = await showKyberDialog<JoinDialogResult?>(
+      context: context,
+      builder: (_) => CosmeticModsDialog.directConnect(),
+    );
+
+    if (!context.mounted || result == null) {
+      return;
+    }
+
+    await context.read<LanDiscoveryCubit>().completeDirectConnectJoin(
+          request,
+          result,
+        );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<LanDiscoveryCubit, LanDiscoveryState>(
+          listenWhen: (previous, current) =>
+              previous.pendingLanJoin != current.pendingLanJoin &&
+              current.pendingLanJoin != null,
+          listener: _onPendingLanJoin,
+        ),
+        BlocListener<LanDiscoveryCubit, LanDiscoveryState>(
+          listenWhen: (previous, current) =>
+              previous.pendingDirectConnect != current.pendingDirectConnect &&
+              current.pendingDirectConnect != null,
+          listener: _onPendingDirectConnect,
+        ),
+        BlocListener<LanDiscoveryCubit, LanDiscoveryState>(
+          listenWhen: (previous, current) =>
+              previous.message != current.message && current.message != null,
+          listener: (context, state) {
+            NotificationService.showNotification(
+              message: state.message!,
+              severity: InfoBarSeverity.warning,
+            );
+          },
+        ),
+      ],
+      child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
@@ -129,6 +200,7 @@ class _ServerBrowserState extends State<ServerBrowser> {
           ),
         ),
       ],
+      ),
     );
   }
 }
