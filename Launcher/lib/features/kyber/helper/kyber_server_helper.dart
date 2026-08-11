@@ -15,6 +15,7 @@ import 'package:kyber_launcher/features/mod_collections/providers/mod_collection
 import 'package:kyber_launcher/features/mods/extensions/frosty_collection_extension.dart';
 import 'package:kyber_launcher/features/mods/services/mod_service.dart';
 import 'package:kyber_launcher/features/server_browser/models/lan_server.dart';
+import 'package:kyber_launcher/features/server_browser/models/lan_server_mod.dart';
 import 'package:kyber_launcher/injection_container.dart';
 import 'package:kyber_launcher/shared/ui/dialog/kyber_dialog.dart';
 import 'package:logging/logging.dart';
@@ -30,40 +31,16 @@ class KyberServerHelper {
     String? password,
   }) async {
     final localMods = sl.get<ModService>().mods;
-    final mods = server.mods.map(
-      (e) => localMods.firstWhere(
-        (element) => element.toKyberString() == '${e.name} (${e.version})',
-      ),
+    final collectionMods = _collectionModsFromKyberMods(
+      localMods,
+      server.mods.map((e) => (name: e.name, version: e.version)),
     );
-    final collectionMods = <CollectionMod>[];
-    for (final mod in mods) {
-      if (mod.isCollection) {
-        final cMods = mod.getMods()!.map(
-          (e) => localMods
-              .firstWhereOrNull((x) => x.filename == e)
-              ?.toCollectionMod(),
-        );
-        if (cMods.contains(null)) {
-          throw Exception(
-            '"${mod.details.name}" is corrupted. Please reinstall it',
-          );
-        }
 
-        collectionMods.addAll(cMods.whereType<CollectionMod>());
-      } else {
-        collectionMods.add(mod.toCollectionMod());
-      }
-    }
-
-    final tmpCollection = ModCollectionMetaData(
+    final tmpCollection = _buildJoinCollection(
       title: server.name,
-      mods: [
-        if (selectedCollection != null &&
-            !selectedCollection.containsGameplayMods())
-          ...collectionMods,
-        if (selectedCollection != null) ...selectedCollection.mods,
-      ],
       localId: server.id,
+      gameplayMods: collectionMods,
+      selectedCollection: selectedCollection,
     );
 
     var serverIp = server.ip;
@@ -155,48 +132,17 @@ class KyberServerHelper {
     bool spectator = false,
   }) async {
     final localMods = sl.get<ModService>().mods;
-    final collectionMods = <CollectionMod>[];
+    final collectionMods = _collectionModsFromLanMods(
+      localMods,
+      server.gameplayMods,
+    );
 
-    for (final requiredMod in server.gameplayMods) {
-      final mod = localMods.firstWhereOrNull(
-        (element) =>
-            element.details.name == requiredMod.name &&
-            element.details.version == requiredMod.version,
-      );
-      if (mod == null) {
-        throw Exception(
-          'Required mod "${requiredMod.name}" (${requiredMod.version}) is not installed',
-        );
-      }
-
-      if (mod.isCollection) {
-        final cMods = mod.getMods()!.map(
-          (e) => localMods
-              .firstWhereOrNull((x) => x.filename == e)
-              ?.toCollectionMod(),
-        );
-        if (cMods.contains(null)) {
-          throw Exception(
-            '"${mod.details.name}" is corrupted. Please reinstall it',
-          );
-        }
-
-        collectionMods.addAll(cMods.whereType<CollectionMod>());
-      } else {
-        collectionMods.add(mod.toCollectionMod());
-      }
-    }
-
-    final tmpCollection = ModCollectionMetaData(
+    final tmpCollection = _buildJoinCollection(
       title: server.name,
-      mods: [
-        if (selectedCollection != null &&
-            !selectedCollection.containsGameplayMods())
-          ...collectionMods,
-        if (selectedCollection != null) ...selectedCollection.mods,
-        if (selectedCollection == null) ...collectionMods,
-      ],
       localId: server.id,
+      gameplayMods: collectionMods,
+      selectedCollection: selectedCollection,
+      includeGameplayWhenNoSelection: true,
     );
 
     await joinByAddress(
@@ -270,5 +216,86 @@ class KyberServerHelper {
     } catch (_) {
       return null;
     }
+  }
+
+  static List<CollectionMod> _collectionModsFromKyberMods(
+    List<FrostyMod> localMods,
+    Iterable<({String name, String version})> requiredMods,
+  ) {
+    final collectionMods = <CollectionMod>[];
+    for (final requiredMod in requiredMods) {
+      final mod = localMods.firstWhere(
+        (element) =>
+            element.toKyberString() ==
+            '${requiredMod.name} (${requiredMod.version})',
+      );
+      collectionMods.addAll(_expandModToCollectionMods(localMods, mod));
+    }
+    return collectionMods;
+  }
+
+  static List<CollectionMod> _collectionModsFromLanMods(
+    List<FrostyMod> localMods,
+    List<LanServerMod> requiredMods,
+  ) {
+    final collectionMods = <CollectionMod>[];
+    for (final requiredMod in requiredMods) {
+      final mod = localMods.firstWhereOrNull(
+        (element) =>
+            element.details.name == requiredMod.name &&
+            element.details.version == requiredMod.version,
+      );
+      if (mod == null) {
+        throw Exception(
+          'Required mod "${requiredMod.name}" (${requiredMod.version}) is not installed',
+        );
+      }
+
+      collectionMods.addAll(_expandModToCollectionMods(localMods, mod));
+    }
+    return collectionMods;
+  }
+
+  static List<CollectionMod> _expandModToCollectionMods(
+    List<FrostyMod> localMods,
+    FrostyMod mod,
+  ) {
+    if (mod.isCollection) {
+      final cMods = mod.getMods()!.map(
+        (e) => localMods
+            .firstWhereOrNull((x) => x.filename == e)
+            ?.toCollectionMod(),
+      );
+      if (cMods.contains(null)) {
+        throw Exception(
+          '"${mod.details.name}" is corrupted. Please reinstall it',
+        );
+      }
+
+      return cMods.whereType<CollectionMod>().toList();
+    }
+
+    return [mod.toCollectionMod()];
+  }
+
+  static ModCollectionMetaData _buildJoinCollection({
+    required String title,
+    required String localId,
+    required List<CollectionMod> gameplayMods,
+    ModCollectionMetaData? selectedCollection,
+    bool includeGameplayWhenNoSelection = false,
+  }) {
+    return ModCollectionMetaData(
+      title: title,
+      mods: [
+        if (selectedCollection != null &&
+            !selectedCollection.containsGameplayMods())
+          ...gameplayMods,
+        if (selectedCollection != null) ...selectedCollection.mods,
+        if (includeGameplayWhenNoSelection && selectedCollection == null)
+          ...gameplayMods,
+      ],
+      localId: localId,
+    );
   }
 }
