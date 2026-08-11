@@ -297,7 +297,7 @@ class StartServerCommand extends Command<int> {
     Env.set('KYBER_ONLINE_MODE', lanMode ? '0' : '1');
     Env.set(
       'KYBER_SERVER_PORT',
-      lanMode ? argResults?['server-port'] as String? ?? '25200' : '25200',
+      lanMode ? (argResults?['server-port'] as String?) ?? '25200' : '25200',
     );
 
     final noDedicated = argResults?['no-dedicated'] as bool? ?? false;
