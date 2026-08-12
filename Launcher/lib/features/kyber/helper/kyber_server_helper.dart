@@ -49,10 +49,13 @@ class KyberServerHelper {
       serverIp = '127.0.0.1';
     }
 
-    final proxies = navigatorKey.currentContext!
-        .read<KyberProxyCubit>()
-        .state
-        .proxies;
+    final proxyCubit = navigatorKey.currentContext!.read<KyberProxyCubit>();
+    if (proxyCubit.isLoading) {
+      NotificationService.info(message: 'Waiting for proxies to load...');
+    }
+
+    await proxyCubit.ensureReady();
+    final proxies = proxyCubit.state.proxies;
     var selectedProxy = proxies.firstWhereOrNull(
       (p) => p.proxy.id == Preferences.general.proxy,
     );
@@ -224,11 +227,19 @@ class KyberServerHelper {
   ) {
     final collectionMods = <CollectionMod>[];
     for (final requiredMod in requiredMods) {
-      final mod = localMods.firstWhere(
-        (element) =>
-            element.toKyberString() ==
-            '${requiredMod.name} (${requiredMod.version})',
-      );
+      final matches = localMods
+          .where(
+            (element) =>
+                element.toKyberString() ==
+                '${requiredMod.name} (${requiredMod.version})',
+          )
+          .toList();
+
+      final mod = matches.firstWhereOrNull(
+            (m) => !m.isCollection || !m.isCorrupted(),
+          ) ??
+          matches.first;
+
       collectionMods.addAll(_expandModToCollectionMods(localMods, mod));
     }
     return collectionMods;
